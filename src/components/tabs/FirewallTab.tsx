@@ -249,34 +249,42 @@ export const FirewallTab: React.FC<FirewallTabProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {autoBanList.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                    <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      {entry.ip}
-                    </td>
-                    <td className="py-3 px-3 text-slate-300">
-                      {entry.country} ({entry.countryCode})
-                    </td>
-                    <td className="py-3 px-3 text-red-400">{entry.reason}</td>
-                    <td className="py-3 px-3 text-slate-400">{entry.bannedAt}</td>
-                    <td className="py-3 px-3 text-amber-400">{entry.expires}</td>
-                    <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold">
-                        {entry.score}/100
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => onUnbanIp(entry.id, entry.ip)}
-                        className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-[11px] font-mono cursor-pointer transition-all flex items-center gap-1.5 ml-auto"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        MỞ KHÓA (UNBAN)
-                      </button>
+                {autoBanList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500 font-mono text-xs">
+                      Chưa có địa chỉ IP nào bị khóa. Toàn bộ lưu lượng hiện đang an toàn.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  autoBanList.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                      <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        {entry.ip}
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">
+                        {entry.country} ({entry.countryCode})
+                      </td>
+                      <td className="py-3 px-3 text-red-400">{entry.reason}</td>
+                      <td className="py-3 px-3 text-slate-400">{entry.bannedAt}</td>
+                      <td className="py-3 px-3 text-amber-400">{entry.expires}</td>
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold">
+                          {entry.score}/100
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          onClick={() => onUnbanIp(entry.id, entry.ip)}
+                          className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-[11px] font-mono cursor-pointer transition-all flex items-center gap-1.5 ml-auto"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          MỞ KHÓA (UNBAN)
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -317,25 +325,33 @@ export const FirewallTab: React.FC<FirewallTabProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {cidrRules.map((r) => (
-                  <tr key={r.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                    <td className="py-3 px-3 font-bold text-white">{r.cidr}</td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                          r.action === 'ALLOW'
-                            ? 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
-                            : 'bg-red-500/20 text-red-400 border-red-500/40'
-                        }`}
-                      >
-                        {r.action}
-                      </span>
+                {cidrRules.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-500 font-mono text-xs">
+                      Chưa có quy tắc CIDR nào. Nhấn &quot;+ THÊM QUY TẮC CIDR&quot; để thiết lập phân đoạn mạng.
                     </td>
-                    <td className="py-3 px-3 text-slate-300">{r.comment}</td>
-                    <td className="py-3 px-3 text-[#00f0ff]">{r.hits.toLocaleString()} pkts</td>
-                    <td className="py-3 px-3 text-slate-400">{r.added}</td>
                   </tr>
-                ))}
+                ) : (
+                  cidrRules.map((r) => (
+                    <tr key={r.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                      <td className="py-3 px-3 font-bold text-white">{r.cidr}</td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            r.action === 'ALLOW'
+                              ? 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
+                              : 'bg-red-500/20 text-red-400 border-red-500/40'
+                          }`}
+                        >
+                          {r.action}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">{r.comment}</td>
+                      <td className="py-3 px-3 text-[#00f0ff]">{r.hits.toLocaleString()} pkts</td>
+                      <td className="py-3 px-3 text-slate-400">{r.added}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

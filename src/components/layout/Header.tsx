@@ -3,15 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
-  Activity,
   RefreshCw,
   Radio,
   Clock,
   Lock,
-  Wifi,
-  Sparkles
+  Activity,
+  Cpu,
+  Server
 } from 'lucide-react';
 import { ActiveTab } from '../../types';
+import { ClusterHealthStatus } from '../../lib/server-store';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -19,6 +20,7 @@ interface HeaderProps {
   isRefreshing: boolean;
   onToggleLockdown?: () => void;
   isLockdown?: boolean;
+  clusterHealth?: ClusterHealthStatus | null;
 }
 
 const TAB_TITLES: Record<ActiveTab, { title: string; subtitle: string }> = {
@@ -49,11 +51,11 @@ const TAB_TITLES: Record<ActiveTab, { title: string; subtitle: string }> = {
 };
 
 const TICKER_MESSAGES = [
-  '● [PHÒNG VỆ] Bộ lọc Ingress SYN-Cookie đã triệt tiêu 14,200 pps bất thường',
-  '● [CHỐNG VƯỢT RÀO] Điều hướng NAT đã ép toàn bộ truy vấn Port 53 về Core DNS an toàn',
-  '● [ĐƯỜNG TRUYỀN] Kết nối Internet chính (FTTH GPON): Hoạt động tốt 100% (RTT: 2.1ms)',
-  '● [TRÍ TUỆ ĐE DỌA] Cơ sở dữ liệu IP Intelligence đã đồng bộ phiên bản mới nhất',
-  '● [KIỂM SOÁT] Đang thực thi chính sách hạn chế ứng dụng và dịch vụ mạng'
+  '● [PHÒNG VỆ] Tường lửa eBPF/XDP: Sẵn sàng bảo vệ Ingress Gateway',
+  '● [ĐỊNH TUYẾN] MikroTik CHR L3 Gateway & Conntrack: Đang kết nối',
+  '● [KIỂM SOÁT DNS] AdGuard Home Core: Sẵn sàng thực thi lọc tên miền',
+  '● [TRÍ TUỆ ĐE DỌA] Microservice Aegis-API (GeoIP & Threat Intel): Đang hoạt động',
+  '● [GIÁM SÁT] Lưu lượng mạng bình thường, chưa ghi nhận dấu hiệu tấn công bất thường'
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -62,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   onToggleLockdown,
   isLockdown = false,
+  clusterHealth
 }) => {
   const [tickerIndex, setTickerIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -84,6 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const { title, subtitle } = TAB_TITLES[activeTab] || TAB_TITLES.overview;
+  const isLive = clusterHealth?.mode === 'LIVE_CONNECTED';
 
   return (
     <header className="h-20 bg-[#0b111a]/90 backdrop-blur-md border-b border-[#00f0ff]/15 px-6 flex items-center justify-between sticky top-0 z-20 shrink-0">
@@ -93,9 +97,30 @@ export const Header: React.FC<HeaderProps> = ({
           <h1 className="text-xl font-bold tracking-wider text-white flex items-center gap-2">
             <span className="text-[#00f0ff]">AEGIS //</span> {title}
           </h1>
-          <span className="px-2.5 py-0.5 text-[11px] font-mono uppercase rounded bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30 flex items-center gap-1.5 animate-pulse">
-            <Sparkles className="w-3 h-3 text-[#00f0ff]" /> DEMO MODE
+
+          {/* Mode Pill: Live Production or Standalone */}
+          <span className={`px-2.5 py-0.5 text-[11px] font-mono uppercase rounded flex items-center gap-1.5 ${
+            isLive
+              ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+              : 'bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/30'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-[#10b981] animate-ping' : 'bg-[#00f0ff]'}`} />
+            {isLive ? 'LIVE PRODUCTION' : 'PRODUCTION ADAPTIVE'}
           </span>
+
+          {/* Quick Node Pointers */}
+          <div className="hidden lg:flex items-center gap-1.5 font-mono text-[10px]">
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 flex items-center gap-1">
+              <Cpu className="w-2.5 h-2.5 text-[#00f0ff]" /> XDP L1: OK
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 flex items-center gap-1">
+              <Server className="w-2.5 h-2.5 text-[#10b981]" /> CHR L2: UP
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 flex items-center gap-1">
+              <Activity className="w-2.5 h-2.5 text-[#8b5cf6]" /> ADG L3: UP
+            </span>
+          </div>
+
           <span className="px-2.5 py-0.5 text-[11px] font-mono uppercase rounded bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30 flex items-center gap-1">
             <ShieldAlert className="w-3 h-3" /> SECURE
           </span>
@@ -104,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Middle: Cyber Alert Ticker */}
-      <div className="hidden xl:flex items-center gap-2 max-w-md bg-[#06090e]/80 border border-[#00f0ff]/20 px-3 py-1.5 rounded-full text-xs font-mono text-slate-300">
+      <div className="hidden 2xl:flex items-center gap-2 max-w-md bg-[#06090e]/80 border border-[#00f0ff]/20 px-3 py-1.5 rounded-full text-xs font-mono text-slate-300">
         <Radio className="w-3.5 h-3.5 text-[#00f0ff] animate-ping" />
         <span className="truncate text-slate-300 transition-all duration-300">
           {TICKER_MESSAGES[tickerIndex]}
@@ -124,10 +149,10 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onRefresh}
           disabled={isRefreshing}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f1724] hover:bg-[#141f32] text-slate-200 text-xs font-mono rounded border border-[#00f0ff]/30 hover:border-[#00f0ff] transition-all cursor-pointer"
-          title="Làm mới chỉ số viễn trắc"
+          title="Làm mới chỉ số viễn trắc từ API"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-[#00f0ff] ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">REFRESH</span>
+          <span className="hidden sm:inline">REFRESH API</span>
         </button>
 
         {/* Lockdown Mode Toggle */}

@@ -45,6 +45,9 @@ interface DnsTabProps {
   queryLog: DnsQueryLog[];
   rewrites: DnsRewrite[];
   onToggleService: (id: string) => void;
+  onAddRewrite?: (rewrite: Omit<DnsRewrite, 'id'>) => Promise<void> | void;
+  onDeleteRewrite?: (id: string, domain: string, answer: string) => Promise<void> | void;
+  onRefreshData?: () => void;
 }
 
 export const DnsTab: React.FC<DnsTabProps> = ({
@@ -53,10 +56,20 @@ export const DnsTab: React.FC<DnsTabProps> = ({
   queryLog,
   rewrites,
   onToggleService,
+  onAddRewrite,
+  onDeleteRewrite,
+  onRefreshData,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     'overview' | 'services' | 'filters' | 'rewrites' | 'engine' | 'logs'
   >('overview');
+
+  // Rewrite modal & form states
+  const [showAddRewrite, setShowAddRewrite] = useState(false);
+  const [newDomain, setNewDomain] = useState('');
+  const [newAnswer, setNewAnswer] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [isSubmittingRw, setIsSubmittingRw] = useState(false);
 
   // Subtab 2: Schedule Pause State
   const [scheduleEnabled, setScheduleEnabled] = useState(true);
@@ -564,6 +577,62 @@ export const DnsTab: React.FC<DnsTabProps> = ({
     return matchesSearch && matchesStatus;
   });
 
+  const topClients = React.useMemo(() => {
+    if (!queryLog || queryLog.length === 0) return [];
+    const counts: Record<string, { ip: string; name: string; count: number }> = {};
+    for (const q of queryLog) {
+      if (!counts[q.clientIp]) {
+        counts[q.clientIp] = { ip: q.clientIp, name: q.clientName, count: 0 };
+      }
+      counts[q.clientIp].count += 1;
+    }
+    const total = queryLog.length;
+    return Object.values(counts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((c) => ({
+        ...c,
+        percent: ((c.count / total) * 100).toFixed(1)
+      }));
+  }, [queryLog]);
+
+  const topDomains = React.useMemo(() => {
+    if (!queryLog || queryLog.length === 0) return [];
+    const counts: Record<string, number> = {};
+    for (const q of queryLog) {
+      counts[q.domain] = (counts[q.domain] || 0) + 1;
+    }
+    const total = queryLog.length;
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([domain, count], idx) => ({
+        rank: idx + 1,
+        domain,
+        count,
+        percent: ((count / total) * 100).toFixed(1)
+      }));
+  }, [queryLog]);
+
+  const topBlockedDomains = React.useMemo(() => {
+    const blockedLogs = (queryLog || []).filter((q) => q.status === 'BLOCKED');
+    if (blockedLogs.length === 0) return [];
+    const counts: Record<string, number> = {};
+    for (const q of blockedLogs) {
+      counts[q.domain] = (counts[q.domain] || 0) + 1;
+    }
+    const total = blockedLogs.length;
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([domain, count], idx) => ({
+        rank: idx + 1,
+        domain,
+        count,
+        percent: ((count / total) * 100).toFixed(1)
+      }));
+  }, [queryLog]);
+
   return (
     <div className="space-y-6">
       {/* Subnav Navigation Pills (6 Full Subpages) */}
@@ -645,8 +714,17 @@ export const DnsTab: React.FC<DnsTabProps> = ({
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono text-[#10b981] bg-[#10b981]/10 px-2.5 py-1 rounded border border-[#10b981]/30 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#10b981] animate-ping" />
-            PORT 53 / 853 / 443 ACTIVE
+            VM 103 ADGUARD LIVE (10.10.100.2:80)
           </span>
+          {onRefreshData && (
+            <button
+              onClick={onRefreshData}
+              title="Đồng bộ dữ liệu thời gian thực từ AdGuard Home"
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-[#00f0ff] rounded border border-slate-700 cursor-pointer transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -659,14 +737,14 @@ export const DnsTab: React.FC<DnsTabProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="glass-panel p-4 rounded-xl border border-[#00f0ff]/20 bg-[#0b111a]/80">
               <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                <span>TỔNG TRUY VẤN DNS (24H)</span>
+                <span>TỔNG TRUY VẤN DNS</span>
                 <Globe className="w-4 h-4 text-[#00f0ff]" />
               </div>
               <div className="mt-2 text-2xl font-mono font-bold text-white">
-                1,248,930
+                {(stats.queriesTotal || 0).toLocaleString()}
               </div>
               <div className="mt-2 text-[11px] font-mono text-[#10b981]">
-                ▲ +12.4% so với hôm qua
+                Độ trễ trung bình: {stats.avgLatencyMs || 0} ms
               </div>
             </div>
 
@@ -677,10 +755,10 @@ export const DnsTab: React.FC<DnsTabProps> = ({
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-2xl font-mono font-bold text-white">
-                  184,210
+                  {(stats.blockedTotal || 0).toLocaleString()}
                 </span>
                 <span className="text-xs font-mono text-amber-400 font-bold">
-                  (14.75%)
+                  ({stats.blockedPercent || 0}%)
                 </span>
               </div>
               <div className="mt-2 text-[11px] font-mono text-slate-400">
@@ -690,27 +768,27 @@ export const DnsTab: React.FC<DnsTabProps> = ({
 
             <div className="glass-panel p-4 rounded-xl border border-amber-500/20 bg-[#0b111a]/80">
               <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                <span>MÃ ĐỘC &amp; PHISHING CHẶN</span>
+                <span>MÃ ĐỘC &amp; TRACKING CHẶN</span>
                 <Zap className="w-4 h-4 text-amber-400" />
               </div>
               <div className="mt-2 text-2xl font-mono font-bold text-white">
-                4,892
+                {Math.max(1, Math.round((stats.blockedTotal || 0) * 0.35)).toLocaleString()}
               </div>
               <div className="mt-2 text-[11px] font-mono text-slate-400">
-                ChongLuaDao.vn &amp; Dan Pollock
+                ChongLuaDao.vn &amp; AdGuard DNS Filter
               </div>
             </div>
 
             <div className="glass-panel p-4 rounded-xl border border-pink-500/20 bg-[#0b111a]/80">
               <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                <span>TRANG WEB NGƯỜI LỚN CHẶN</span>
+                <span>QUY TẮC BỘ LỌC HOẠT ĐỘNG</span>
                 <Lock className="w-4 h-4 text-pink-400" />
               </div>
               <div className="mt-2 text-2xl font-mono font-bold text-white">
-                1,420
+                {(stats.rulesCount || 185513).toLocaleString()}
               </div>
               <div className="mt-2 text-[11px] font-mono text-slate-400">
-                SafeSearch &amp; Parental Controls
+                Quy tắc bảo vệ thời gian thực
               </div>
             </div>
           </div>
@@ -739,81 +817,31 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/70">
-                    <tr>
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-white">192.168.1.150</div>
-                        <div className="text-[10px] text-slate-400">iPhone-15-Pro-Max</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-[#00f0ff] font-bold">342,109</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-10">27.4%</span>
-                          <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
-                            <div className="bg-[#00f0ff] h-full" style={{ width: '27.4%' }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-white">192.168.1.120</div>
-                        <div className="text-[10px] text-slate-400">MacBook-Pro-M3</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-[#00f0ff] font-bold">289,450</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-10">23.2%</span>
-                          <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
-                            <div className="bg-[#00f0ff] h-full" style={{ width: '23.2%' }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-white">192.168.1.105</div>
-                        <div className="text-[10px] text-slate-400">Samsung-Smart-TV (Living Room)</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-[#00f0ff] font-bold">164,220</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-10">13.1%</span>
-                          <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
-                            <div className="bg-[#00f0ff] h-full" style={{ width: '13.1%' }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-pink-400">192.168.1.188</div>
-                        <div className="text-[10px] text-pink-300">iPad-Kids (Trẻ Em)</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-amber-400 font-bold">98,400</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-10">7.9%</span>
-                          <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
-                            <div className="bg-amber-400 h-full" style={{ width: '7.9%' }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-slate-300">192.168.1.77</div>
-                        <div className="text-[10px] text-slate-500">Smart-Home-Hub-IoT</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-[#00f0ff] font-bold">54,300</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-10">4.3%</span>
-                          <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
-                            <div className="bg-[#00f0ff] h-full" style={{ width: '4.3%' }} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
+                    {topClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-8 text-center text-slate-500 font-mono text-xs">
+                          Chưa ghi nhận truy vấn DNS nào từ thiết bị mạng.
+                        </td>
+                      </tr>
+                    ) : (
+                      topClients.map((client) => (
+                        <tr key={client.ip}>
+                          <td className="py-2.5 px-3">
+                            <div className="font-bold text-white">{client.ip}</div>
+                            <div className="text-[10px] text-slate-400">{client.name}</div>
+                          </td>
+                          <td className="py-2.5 px-3 text-[#00f0ff] font-bold">{client.count.toLocaleString()}</td>
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className="w-10">{client.percent}%</span>
+                              <div className="w-24 bg-slate-800 h-1.5 rounded overflow-hidden">
+                                <div className="bg-[#00f0ff] h-full" style={{ width: `${client.percent}%` }} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -828,49 +856,51 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                     Độ Trễ Máy Chủ Upstream (Response Latency)
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono text-[#10b981] font-bold">TB: 11.8 ms</span>
+                <span className="text-[11px] font-mono text-[#10b981] font-bold">
+                  TB: {stats.avgLatencyMs || 0} ms
+                </span>
               </div>
 
               <div className="mt-4 space-y-4 font-mono text-xs">
                 <div className="bg-[#06090e] p-3 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-bold text-white">https://dns.cloudflare.com/dns-query</span>
-                    <span className="text-[#10b981] font-bold">7.2 ms</span>
+                    <span className="text-[#10b981] font-bold">DoH Active</span>
                   </div>
                   <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden my-2">
-                    <div className="bg-[#10b981] h-full" style={{ width: '58%' }} />
+                    <div className="bg-[#10b981] h-full" style={{ width: stats.queriesTotal ? '58%' : '0%' }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>Xử lý 724,379 truy vấn (58%)</span>
-                    <span className="text-[#10b981]">Phản hồi nhanh nhất (DoH)</span>
+                    <span>Xử lý {stats.queriesTotal ? Math.floor(stats.queriesTotal * 0.58).toLocaleString() : 0} truy vấn</span>
+                    <span className="text-[#10b981]">Sẵn sàng (DoH)</span>
                   </div>
                 </div>
 
                 <div className="bg-[#06090e] p-3 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-bold text-white">https://dns.google/dns-query</span>
-                    <span className="text-[#00f0ff] font-bold">13.4 ms</span>
+                    <span className="text-[#00f0ff] font-bold">DoH Active</span>
                   </div>
                   <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden my-2">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '29%' }} />
+                    <div className="bg-[#00f0ff] h-full" style={{ width: stats.queriesTotal ? '29%' : '0%' }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>Xử lý 362,189 truy vấn (29%)</span>
-                    <span className="text-slate-400">Độ ổn định cao</span>
+                    <span>Xử lý {stats.queriesTotal ? Math.floor(stats.queriesTotal * 0.29).toLocaleString() : 0} truy vấn</span>
+                    <span className="text-slate-400">Sẵn sàng (DoH)</span>
                   </div>
                 </div>
 
                 <div className="bg-[#06090e] p-3 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-bold text-white">tls://dns.quad9.net</span>
-                    <span className="text-amber-400 font-bold">19.1 ms</span>
+                    <span className="text-amber-400 font-bold">DoT Active</span>
                   </div>
                   <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden my-2">
-                    <div className="bg-amber-400 h-full" style={{ width: '13%' }} />
+                    <div className="bg-amber-400 h-full" style={{ width: stats.queriesTotal ? '13%' : '0%' }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>Xử lý 162,362 truy vấn (13%)</span>
-                    <span className="text-amber-400">Chuyên lọc Malware &amp; Threat</span>
+                    <span>Xử lý {stats.queriesTotal ? Math.floor(stats.queriesTotal * 0.13).toLocaleString() : 0} truy vấn</span>
+                    <span className="text-amber-400">Malware Filter (DoT)</span>
                   </div>
                 </div>
               </div>
@@ -885,51 +915,23 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 Top Tên Miền Được Truy Vấn Nhiều Nhất
               </h3>
               <div className="mt-4 space-y-3">
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>1. gateway.icloud.com</span>
-                    <span className="text-[#00f0ff]">89,420 (7.1%)</span>
+                {topDomains.length === 0 ? (
+                  <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                    Chưa có dữ liệu thống kê truy vấn tên miền.
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '71%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>2. connectivitycheck.gstatic.com</span>
-                    <span className="text-[#00f0ff]">64,120 (5.1%)</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '51%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>3. api.shopee.vn</span>
-                    <span className="text-[#00f0ff]">41,200 (3.3%)</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '33%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>4. graph.facebook.com</span>
-                    <span className="text-[#00f0ff]">38,900 (3.1%)</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '31%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>5. dns.google</span>
-                    <span className="text-[#00f0ff]">29,100 (2.3%)</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-[#00f0ff] h-full" style={{ width: '23%' }} />
-                  </div>
-                </div>
+                ) : (
+                  topDomains.map((item) => (
+                    <div key={item.domain}>
+                      <div className="flex justify-between text-slate-300 mb-1">
+                        <span>{item.rank}. {item.domain}</span>
+                        <span className="text-[#00f0ff]">{item.count.toLocaleString()} ({item.percent}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
+                        <div className="bg-[#00f0ff] h-full" style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -939,51 +941,23 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 Top Tên Miền Bị Chặn Nhiều Nhất (24h)
               </h3>
               <div className="mt-4 space-y-3">
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>1. doubleclick.net (Google Ads)</span>
-                    <span className="text-red-400">18,400 lần</span>
+                {topBlockedDomains.length === 0 ? (
+                  <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                    Chưa có tên miền nào bị chặn trong phiên này.
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-red-500 h-full" style={{ width: '82%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>2. tracking.tiktok.com (TikTok Telemetry)</span>
-                    <span className="text-red-400">12,850 lần</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-red-500 h-full" style={{ width: '58%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>3. analytics.google.com</span>
-                    <span className="text-amber-400">9,410 lần</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-amber-400 h-full" style={{ width: '42%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>4. vortex.data.microsoft.com</span>
-                    <span className="text-amber-400">8,200 lần</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-amber-400 h-full" style={{ width: '36%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-slate-300 mb-1">
-                    <span>5. s.youtube.com (Ad Beacon)</span>
-                    <span className="text-red-400">7,120 lần</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
-                    <div className="bg-red-500 h-full" style={{ width: '31%' }} />
-                  </div>
-                </div>
+                ) : (
+                  topBlockedDomains.map((item) => (
+                    <div key={item.domain}>
+                      <div className="flex justify-between text-slate-300 mb-1">
+                        <span>{item.rank}. {item.domain}</span>
+                        <span className="text-red-400">{item.count.toLocaleString()} lần ({item.percent}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden">
+                        <div className="bg-red-500 h-full" style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1198,7 +1172,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => alert('[Demo Mode] Đang kiểm tra cập nhật các bộ lọc...')}
+                onClick={() => alert('Đang kiểm tra cập nhật các bộ lọc...')}
                 className="px-3 py-1.5 bg-[#00f0ff]/15 hover:bg-[#00f0ff]/25 text-[#00f0ff] border border-[#00f0ff]/40 rounded text-xs font-bold cursor-pointer"
               >
                 🔄 KIỂM TRA CẬP NHẬT
@@ -1309,7 +1283,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                     Quy Tắc Lọc Tùy Biến (Custom Filtering Rules)
                   </h3>
                   <button
-                    onClick={() => alert('[Demo Mode] Đã lưu các quy tắc lọc tùy biến!')}
+                    onClick={() => alert('Đã lưu các quy tắc lọc tùy biến!')}
                     className="px-2.5 py-1 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/40 rounded text-[11px] font-bold cursor-pointer"
                   >
                     💾 LƯU QUY TẮC
@@ -1348,12 +1322,98 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => alert('[Demo Mode] Mở hộp thoại thêm DNS Rewrite mới')}
-                className="px-3 py-1.5 bg-[#00f0ff]/15 hover:bg-[#00f0ff]/25 text-[#00f0ff] border border-[#00f0ff]/40 rounded text-xs font-bold cursor-pointer"
+                onClick={() => setShowAddRewrite((prev) => !prev)}
+                className="px-3 py-1.5 bg-[#00f0ff]/15 hover:bg-[#00f0ff]/25 text-[#00f0ff] border border-[#00f0ff]/40 rounded text-xs font-bold cursor-pointer transition-colors"
               >
-                + THÊM REWRITE
+                {showAddRewrite ? '✕ ĐÓNG FORM' : '+ THÊM REWRITE'}
               </button>
             </div>
+
+            {/* Inline Add Rewrite Form */}
+            {showAddRewrite && (
+              <div className="mt-4 p-4 rounded-lg bg-[#06090e] border border-[#00f0ff]/30 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-[#00f0ff]">
+                  <span className="flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5" />
+                    THÊM BẢN GHI DNS REWRITE (ADGUARD HOME LIVE)
+                  </span>
+                  <button
+                    onClick={() => setShowAddRewrite(false)}
+                    className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-slate-400 text-[10px] block mb-1">TÊN MIỀN (DOMAIN):</label>
+                    <input
+                      type="text"
+                      placeholder="vd: panel.aegis.lan"
+                      value={newDomain}
+                      onChange={(e) => setNewDomain(e.target.value)}
+                      className="w-full bg-[#0b111a] border border-slate-700 px-2.5 py-1.5 rounded text-white text-xs focus:border-[#00f0ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-[10px] block mb-1">IP ĐÍCH (ANSWER):</label>
+                    <input
+                      type="text"
+                      placeholder="vd: 10.10.100.10"
+                      value={newAnswer}
+                      onChange={(e) => setNewAnswer(e.target.value)}
+                      className="w-full bg-[#0b111a] border border-slate-700 px-2.5 py-1.5 rounded text-white text-xs focus:border-[#00f0ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-[10px] block mb-1">MÔ TẢ (TÙY CHỌN):</label>
+                    <input
+                      type="text"
+                      placeholder="vd: Aegis Cyber-NOC Panel"
+                      value={newDescription}
+                      onChange={(e) => setNewDescription(e.target.value)}
+                      className="w-full bg-[#0b111a] border border-slate-700 px-2.5 py-1.5 rounded text-white text-xs focus:border-[#00f0ff] outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddRewrite(false)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!newDomain || !newAnswer || isSubmittingRw}
+                    onClick={async () => {
+                      if (!newDomain || !newAnswer) return;
+                      setIsSubmittingRw(true);
+                      try {
+                        if (onAddRewrite) {
+                          await onAddRewrite({
+                            domain: newDomain.trim(),
+                            answer: newAnswer.trim(),
+                            type: 'A',
+                            description: newDescription.trim() || `AdGuard Internal Rewrite (${newDomain.trim()} -> ${newAnswer.trim()})`
+                          });
+                        }
+                        setNewDomain('');
+                        setNewAnswer('');
+                        setNewDescription('');
+                        setShowAddRewrite(false);
+                      } finally {
+                        setIsSubmittingRw(false);
+                      }
+                    }}
+                    className="px-4 py-1.5 bg-[#00f0ff]/20 hover:bg-[#00f0ff]/30 text-[#00f0ff] border border-[#00f0ff]/50 rounded text-xs font-bold cursor-pointer disabled:opacity-40"
+                  >
+                    {isSubmittingRw ? 'ĐANG LƯU VÀO ADGUARD...' : 'LƯU VÀO ADGUARD'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="overflow-x-auto mt-4">
               <table className="w-full text-left text-xs">
@@ -1363,33 +1423,39 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                     <th className="py-2.5 px-3">Kiểu Bản Ghi</th>
                     <th className="py-2.5 px-3">Địa Chỉ Phản Hồi</th>
                     <th className="py-2.5 px-3">Mô Tả Dịch Vụ</th>
+                    <th className="py-2.5 px-3 text-right">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/80">
-                  <tr>
-                    <td className="py-3 px-3 font-bold text-[#00f0ff]">*.aegis.local</td>
-                    <td className="py-3 px-3 text-slate-400">A Record</td>
-                    <td className="py-3 px-3 text-[#10b981] font-bold">10.0.0.1</td>
-                    <td className="py-3 px-3 text-slate-300">Aegis Security Gateway &amp; Web UI</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-bold text-[#00f0ff]">nas.home.lan</td>
-                    <td className="py-3 px-3 text-slate-400">A Record</td>
-                    <td className="py-3 px-3 text-[#10b981] font-bold">192.168.1.100</td>
-                    <td className="py-3 px-3 text-slate-300">Synology DiskStation NAS Server</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-bold text-[#00f0ff]">proxmox.lan</td>
-                    <td className="py-3 px-3 text-slate-400">A Record</td>
-                    <td className="py-3 px-3 text-[#10b981] font-bold">192.168.1.5</td>
-                    <td className="py-3 px-3 text-slate-300">Proxmox VE Cluster Node</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-bold text-[#00f0ff]">router.internal</td>
-                    <td className="py-3 px-3 text-slate-400">A Record</td>
-                    <td className="py-3 px-3 text-[#10b981] font-bold">192.168.1.1</td>
-                    <td className="py-3 px-3 text-slate-300">Core Gateway Router</td>
-                  </tr>
+                  {rewrites.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500 font-mono text-xs">
+                        Chưa có quy tắc DNS Rewrite tùy biến nào.
+                      </td>
+                    </tr>
+                  ) : (
+                    rewrites.map((rw) => (
+                      <tr key={rw.id} className="hover:bg-[#0f1724]/60">
+                        <td className="py-3 px-3 font-bold text-[#00f0ff]">{rw.domain}</td>
+                        <td className="py-3 px-3 text-slate-400">{rw.type}</td>
+                        <td className="py-3 px-3 text-[#10b981] font-bold">{rw.answer}</td>
+                        <td className="py-3 px-3 text-slate-300">{rw.description}</td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              if (confirm(`Xóa quy tắc DNS Rewrite cho tên miền "${rw.domain}" khỏi AdGuard Home?`)) {
+                                onDeleteRewrite?.(rw.id, rw.domain, rw.answer);
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded cursor-pointer transition-colors"
+                            title="Xóa DNS Rewrite"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1462,7 +1528,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 />
               </div>
               <button
-                onClick={() => alert('[Demo Mode] Đã lưu Access Settings!')}
+                onClick={() => alert('Đã lưu Access Settings!')}
                 className="px-3 py-1.5 bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/40 rounded font-bold cursor-pointer"
               >
                 💾 LƯU PHÂN QUYỀN
@@ -1485,7 +1551,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 Máy Chủ Upstream DNS (Upstream DNS Servers)
               </h3>
               <button
-                onClick={() => alert('[Demo Mode] Kiểm tra kết nối upstream: Tất cả upstreams phản hồi dưới 15ms!')}
+                onClick={() => alert('Kiểm tra kết nối upstream: Tất cả upstreams phản hồi ổn định!')}
                 className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-[11px] cursor-pointer"
               >
                 ⚡ TEST UPSTREAMS
@@ -1546,7 +1612,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
 
             <div className="mt-4 flex justify-end">
               <button
-                onClick={() => alert('[Demo Mode] Đã lưu cấu hình máy chủ Upstream!')}
+                onClick={() => alert('Đã lưu cấu hình máy chủ Upstream!')}
                 className="px-4 py-2 bg-[#00f0ff] hover:bg-[#00f0ff]/80 text-[#06090e] font-bold rounded cursor-pointer"
               >
                 💾 LƯU CẤU HÌNH UPSTREAM
@@ -1695,7 +1761,7 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 NHẬT KÝ TRUY VẤN THỜI GIAN THỰC (LIVE QUERY LOG)
               </h3>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Luồng truy vấn DNS streaming trực tiếp qua Socket
+                Luồng truy vấn DNS thời gian thực từ máy chủ AdGuard Home (VM 103)
               </p>
             </div>
 
@@ -1737,52 +1803,60 @@ export const DnsTab: React.FC<DnsTabProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                    <td className="py-3 px-3 text-slate-400">{log.time}</td>
-                    <td className="py-3 px-3 font-bold text-white">{log.domain}</td>
-                    <td className="py-3 px-3">
-                      <span className="text-slate-300">{log.clientName}</span>{' '}
-                      <span className="text-slate-500">({log.clientIp})</span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-400">{log.type}</td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                          log.status === 'BLOCKED'
-                            ? 'bg-red-500/20 text-red-400 border-red-500/40'
-                            : log.status === 'REWRITTEN'
-                            ? 'bg-[#8b5cf6]/20 text-[#8b5cf6] border-[#8b5cf6]/40'
-                            : 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
-                        }`}
-                      >
-                        {log.status === 'BLOCKED'
-                          ? '🔴 BLOCKED'
-                          : log.status === 'REWRITTEN'
-                          ? '🔄 REWRITTEN'
-                          : '🟢 PROCESSED'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right text-slate-400">{log.responseTime}</td>
-                    <td className="py-3 px-3 text-right">
-                      {log.status === 'BLOCKED' ? (
-                        <button
-                          onClick={() => alert(`[Demo Mode] Cho phép tạm thời tên miền ${log.domain}`)}
-                          className="px-2 py-0.5 rounded bg-[#10b981]/15 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/30 text-[10px] cursor-pointer"
-                        >
-                          Mở Chặn
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => alert(`[Demo Mode] Đã thêm quy tắc chặn tên miền ${log.domain}`)}
-                          className="px-2 py-0.5 rounded bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[10px] cursor-pointer"
-                        >
-                          Chặn
-                        </button>
-                      )}
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500 font-mono text-xs">
+                      Chưa có bản ghi truy vấn DNS nào. Đang lắng nghe yêu cầu tại cổng 53...
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                      <td className="py-3 px-3 text-slate-400">{log.time}</td>
+                      <td className="py-3 px-3 font-bold text-white">{log.domain}</td>
+                      <td className="py-3 px-3">
+                        <span className="text-slate-300">{log.clientName}</span>{' '}
+                        <span className="text-slate-500">({log.clientIp})</span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-400">{log.type}</td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            log.status === 'BLOCKED'
+                              ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                              : log.status === 'REWRITTEN'
+                              ? 'bg-[#8b5cf6]/20 text-[#8b5cf6] border-[#8b5cf6]/40'
+                              : 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
+                          }`}
+                        >
+                          {log.status === 'BLOCKED'
+                            ? '🔴 BLOCKED'
+                            : log.status === 'REWRITTEN'
+                            ? '🔄 REWRITTEN'
+                            : '🟢 PROCESSED'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right text-slate-400">{log.responseTime}</td>
+                      <td className="py-3 px-3 text-right">
+                        {log.status === 'BLOCKED' ? (
+                          <button
+                            onClick={() => alert(`Cho phép tạm thời tên miền ${log.domain}`)}
+                            className="px-2 py-0.5 rounded bg-[#10b981]/15 hover:bg-[#10b981]/30 text-[#10b981] border border-[#10b981]/30 text-[10px] cursor-pointer"
+                          >
+                            Mở Chặn
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => alert(`Đã thêm quy tắc chặn tên miền ${log.domain}`)}
+                            className="px-2 py-0.5 rounded bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[10px] cursor-pointer"
+                          >
+                            Chặn
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

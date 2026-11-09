@@ -158,6 +158,9 @@ export interface SpeedtestServer {
   isp: string;
   location: string;
   ping: number;
+  type?: 'cloudflare' | 'local' | 'probe' | 'custom';
+  endpoint?: string;
+  downloadBytes?: number;
 }
 
 export interface NetflowSession {

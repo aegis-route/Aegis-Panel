@@ -1,0 +1,17 @@
+services:
+  aegis-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis-panel
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - AEGIS_API_URL=http://127.0.0.1:3000
+      - KERNELFW_URL=http://172.30.0.101:8080
+      - ROUTEROS_URL=http://192.168.100.1
+      - ADGUARD_URL=http://192.168.100.2:80
+    network_mode: "host"

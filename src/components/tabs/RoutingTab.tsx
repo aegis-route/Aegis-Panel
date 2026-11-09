@@ -646,40 +646,48 @@ export const RoutingTab: React.FC<RoutingTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {leases.map((lease) => (
-                <tr key={lease.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                  <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-                    {lease.ip}
-                  </td>
-                  <td className="py-3 px-3 text-slate-400">{lease.mac}</td>
-                  <td className="py-3 px-3 text-slate-200">{lease.hostname}</td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">
-                      {lease.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-amber-400">{lease.expires}</td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => onToggleFastTrack(lease.id)}
-                      className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:border-[#00f0ff] transition-all"
-                    >
-                      {lease.fastTrack ? (
-                        <>
-                          <span className="text-[#10b981] font-bold">ENABLED</span>
-                          <ToggleRight className="w-4 h-4 text-[#10b981]" />
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-slate-400">DISABLED</span>
-                          <ToggleLeft className="w-4 h-4 text-slate-500" />
-                        </>
-                      )}
-                    </button>
+              {leases.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-slate-500 font-mono text-xs">
+                    Chưa có thiết bị nào được cấp phát DHCP. Sẵn sàng lắng nghe yêu cầu DHCP Discover.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                leases.map((lease) => (
+                  <tr key={lease.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                    <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+                      {lease.ip}
+                    </td>
+                    <td className="py-3 px-3 text-slate-400">{lease.mac}</td>
+                    <td className="py-3 px-3 text-slate-200">{lease.hostname}</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">
+                        {lease.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-amber-400">{lease.expires}</td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => onToggleFastTrack(lease.id)}
+                        className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:border-[#00f0ff] transition-all"
+                      >
+                        {lease.fastTrack ? (
+                          <>
+                            <span className="text-[#10b981] font-bold">ENABLED</span>
+                            <ToggleRight className="w-4 h-4 text-[#10b981]" />
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-400">DISABLED</span>
+                            <ToggleLeft className="w-4 h-4 text-slate-500" />
+                          </>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -754,7 +762,14 @@ export const RoutingTab: React.FC<RoutingTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {natRules.map((rule) => {
+              {natRules.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-slate-500 font-mono text-xs">
+                    Chưa có quy tắc NAT Port nào. Nhấn &quot;Thêm Quy Tắc DSTNAT&quot; để cấu hình mở cổng dịch vụ.
+                  </td>
+                </tr>
+              ) : (
+                natRules.map((rule) => {
                 const isDnsRule = rule.dstPort === '53' || rule.comment.includes('Anti-Bypass');
                 const isEnabled = rule.enabled !== false;
 
@@ -823,7 +838,7 @@ export const RoutingTab: React.FC<RoutingTabProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

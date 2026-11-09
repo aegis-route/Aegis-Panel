@@ -18,31 +18,53 @@ import {
 } from 'lucide-react';
 import { ActiveTab } from '../../types';
 import { GeoMap } from '../common/GeoMap';
+import { apiClient } from '../../lib/api-client';
 
 interface NocTabProps {
   onNavigateTab: (tab: ActiveTab) => void;
 }
 
 export const NocTab: React.FC<NocTabProps> = ({ onNavigateTab }) => {
-  const [throughput, setThroughput] = useState(842.4);
-  const [pps, setPps] = useState(184200);
-  const [drops, setDrops] = useState(4120890);
+  const [throughput, setThroughput] = useState(0.0);
+  const [pps, setPps] = useState(0);
+  const [drops, setDrops] = useState(0);
+  const [activeSessions, setActiveSessions] = useState(0);
   const [chartData, setChartData] = useState<number[]>([
-    45, 52, 58, 64, 60, 68, 74, 70, 78, 85, 82, 89, 93, 88, 94
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
   ]);
 
-  // Subtle real-time fluctuation simulation
+  // Live telemetry polling from API
   useEffect(() => {
-    const interval = setInterval(() => {
-      setThroughput((prev) => +(prev + (Math.random() * 4 - 2)).toFixed(1));
-      setPps((prev) => Math.floor(prev + (Math.random() * 800 - 400)));
-      setDrops((prev) => prev + Math.floor(Math.random() * 3));
-      setChartData((prev) => {
-        const next = [...prev.slice(1), Math.floor(75 + Math.random() * 20)];
-        return next;
-      });
-    }, 2000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+    const fetchTelemetry = async () => {
+      try {
+        const data = await apiClient.system.getLiveTelemetry();
+        if (data && isMounted) {
+          setThroughput(data.throughputMbps);
+          setPps(data.pps);
+          setDrops(data.totalDrops);
+          setActiveSessions(data.activeSessions);
+          setChartData((prev) => [
+            ...prev.slice(1),
+            data.throughputMbps > 0 ? Math.min(100, Math.max(5, Math.floor((data.throughputMbps / 1024) * 100))) : 0
+          ]);
+        }
+      } catch {
+        // Keep baseline clean if disconnected
+        if (isMounted) {
+          setThroughput(0.0);
+          setPps(0);
+          setChartData((prev) => [...prev.slice(1), 0]);
+        }
+      }
+    };
+
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -97,7 +119,7 @@ export const NocTab: React.FC<NocTabProps> = ({ onNavigateTab }) => {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-mono font-bold text-white tracking-tight">
-              1,842
+              {activeSessions.toLocaleString()}
             </span>
             <span className="text-xs font-mono text-[#8b5cf6]">sessions</span>
           </div>

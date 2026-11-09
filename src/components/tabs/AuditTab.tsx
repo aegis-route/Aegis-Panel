@@ -260,36 +260,44 @@ export const AuditTab: React.FC<AuditTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {backups.map((bk) => (
-                <tr key={bk.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                  <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
-                    <FileCheck className="w-4 h-4 text-[#10b981]" />
-                    {bk.filename}
-                  </td>
-                  <td className="py-3 px-3 text-slate-300">{bk.target}</td>
-                  <td className="py-3 px-3 text-[#00f0ff]">{bk.size}</td>
-                  <td className="py-3 px-3 text-slate-400">{bk.created}</td>
-                  <td className="py-3 px-3 text-slate-500 font-mono text-[10px]">{bk.hash}</td>
-                  <td className="py-3 px-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => alert(`[Demo Mode] Tải về bản sao lưu: ${bk.filename}`)}
-                        className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
-                        title="Tải về file snapshot"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => onRestoreBackup(bk.filename)}
-                        className="px-2.5 py-1 rounded bg-[#00f0ff]/15 hover:bg-[#00f0ff]/25 text-[#00f0ff] border border-[#00f0ff]/30 text-[11px] font-mono cursor-pointer flex items-center gap-1"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        KHÔI PHỤC
-                      </button>
-                    </div>
+              {backups.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 font-mono text-xs">
+                    Chưa có bản sao lưu snapshot nào trong Vault. Nhấn &quot;TẠO SNAPSHOT MỚI&quot; để sao lưu an toàn.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                backups.map((bk) => (
+                  <tr key={bk.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                    <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
+                      <FileCheck className="w-4 h-4 text-[#10b981]" />
+                      {bk.filename}
+                    </td>
+                    <td className="py-3 px-3 text-slate-300">{bk.target}</td>
+                    <td className="py-3 px-3 text-[#00f0ff]">{bk.size}</td>
+                    <td className="py-3 px-3 text-slate-400">{bk.created}</td>
+                    <td className="py-3 px-3 text-slate-500 font-mono text-[10px]">{bk.hash}</td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => alert(`Đang tải về bản sao lưu: ${bk.filename}`)}
+                          className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                          title="Tải về file snapshot"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onRestoreBackup(bk.filename)}
+                          className="px-2.5 py-1 rounded bg-[#00f0ff]/15 hover:bg-[#00f0ff]/25 text-[#00f0ff] border border-[#00f0ff]/30 text-[11px] font-mono cursor-pointer flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          KHÔI PHỤC
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -323,28 +331,36 @@ export const AuditTab: React.FC<AuditTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {auditLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-[#0f1724]/60 transition-colors">
-                  <td className="py-3 px-3 text-slate-400">{log.timestamp}</td>
-                  <td className="py-3 px-3 text-[#00f0ff]">{log.operator}</td>
-                  <td className="py-3 px-3 font-bold text-white">{log.action}</td>
-                  <td className="py-3 px-3 text-slate-300">{log.target}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        log.severity === 'CRIT'
-                          ? 'bg-red-500/20 text-red-400 border-red-500/40'
-                          : log.severity === 'WARN'
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                          : 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
-                      }`}
-                    >
-                      {log.severity}
-                    </span>
+              {auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 font-mono text-xs">
+                    Chưa có nhật ký kiểm toán nào. Hệ thống sẵn sàng ghi nhận các sự kiện an ninh...
                   </td>
-                  <td className="py-3 px-3 text-slate-300">{log.details}</td>
                 </tr>
-              ))}
+              ) : (
+                auditLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-[#0f1724]/60 transition-colors">
+                    <td className="py-3 px-3 text-slate-400">{log.timestamp}</td>
+                    <td className="py-3 px-3 text-[#00f0ff]">{log.operator}</td>
+                    <td className="py-3 px-3 font-bold text-white">{log.action}</td>
+                    <td className="py-3 px-3 text-slate-300">{log.target}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          log.severity === 'CRIT'
+                            ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                            : log.severity === 'WARN'
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                            : 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]/40'
+                        }`}
+                      >
+                        {log.severity}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-300">{log.details}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
